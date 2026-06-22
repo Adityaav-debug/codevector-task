@@ -15,7 +15,7 @@ app.add_middleware(
     allow_methods=["*"], allow_headers=["*"]
 )
 
-pool = None
+pool: asyncpg.Pool | None = None
 
 @app.on_event("startup")
 async def startup():
@@ -24,13 +24,14 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    await pool.close()
+    if pool:
+        await pool.close()
 
 
 @app.get("/products")
 async def get_products(
     category: Optional[str] = None,
-    limit: int = Query(default=20, le=100),
+    limit: int = Query(default=20, ge=1, le=100),
     cursor: Optional[str] = None,
 ):
     cursor_created_at = None
@@ -52,7 +53,7 @@ async def get_products(
 
     if cursor_created_at and cursor_id is not None:
         from datetime import datetime
-        dt = datetime.strptime(cursor_created_at.strip(), '%Y-%m-%d %H:%M:%S.%f')
+        dt = datetime.fromisoformat(cursor_created_at)
         params.append(dt)
         params.append(cursor_id)
         conditions.append(
@@ -77,7 +78,7 @@ async def get_products(
     next_cursor = None
     if has_next and rows:
         last = rows[-1]
-        next_cursor = f"{last['created_at'].strftime('%Y-%m-%d %H:%M:%S.%f')}__{last['id']}"
+        next_cursor = f"{last['created_at'].isoformat()}__{last['id']}"
 
     return {
         "data": [
